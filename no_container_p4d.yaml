@@ -1,0 +1,102 @@
+# An unique identifier for the head node and workers of this cluster.
+cluster_name: gpu_no_container
+
+# The minimum number of workers nodes to launch in addition to the head
+# node.
+min_workers: 0
+
+# The maximum number of workers nodes to launch in addition to the head
+# node.
+max_workers: 0
+
+# The autoscaler will scale up the cluster faster with higher upscaling speed.
+upscaling_speed: 2.0
+
+# If a node is idle for this many minutes, it will be removed.
+idle_timeout_minutes: 150
+
+# Cloud-provider specific configuration.
+provider:
+    type: aws
+    region: us-west-2
+    availability_zone: us-west-2a
+    cache_stopped_nodes: True # If not present, the default is True.
+
+# How Ray will authenticate with newly launched nodes.
+auth:
+    ssh_user: ec2-user
+    ssh_private_key:  /Users/fcamargx/Desktop/fcamargx-key-pair.pem
+
+head_node:
+    InstanceType: p4d.24xlarge
+    #ImageId: ami-0816a4ee814495ee0 #
+    ImageId: ami-02cbefffec4d9a06c
+    KeyName: fcamargx-key-pair
+
+worker_nodes:
+    InstanceType: p4d.24xlarge
+    #ImageId: ami-0816a4ee814495ee0
+    ImageId: ami-02cbefffec4d9a06c
+    KeyName: fcamargx-key-pair
+
+    # Run workers on spot by default. Comment this out to use on-demand.
+    InstanceMarketOptions:
+        MarketType: spot
+
+# Files or directories to copy to the head and worker nodes. The format is a
+# dictionary from REMOTE_PATH: LOCAL_PATH, e.g.
+file_mounts: {
+#    "/path1/on/remote/machine": "/path1/on/local/machine",
+#    "/path2/on/remote/machine": "/path2/on/local/machine",
+}
+
+# Whether changes to directories in file_mounts or cluster_synced_files in the head node
+# should sync to the worker node continuously
+file_mounts_sync_continuously: False
+
+# Patterns for files to exclude when running rsync up or rsync down
+rsync_exclude:
+    - "**/.git"
+    - "**/.git/**"
+
+# Pattern files to use for filtering out files when running rsync up or rsync down. The file is searched for
+# in the source directory and recursively through all subdirectories. For example, if .gitignore is provided
+# as a value, the behavior will match git's behavior for finding and using .gitignore files.
+rsync_filter:
+    - ".gitignore"
+
+# List of commands that will be run before `setup_commands`. If docker is
+# enabled, these commands will run outside the container and before docker
+# is setup.
+initialization_commands: []
+
+
+# List of shell commands to run to set up nodes.
+setup_commands:
+    # Note: if you're developing Ray, you probably want to create a Docker image that
+    # has your Ray repo pre-cloned. Then, you can replace the pip installs
+    # below with a git checkout <your_sha> (and possibly a recompile).
+    # To run the nightly version of ray (as opposed to the latest), either use a rayproject docker image
+    # that has the "nightly" (e.g. "rayproject/ray-ml:nightly-gpu") or uncomment the following line:
+   # - sudo apt install python3-pip
+    #- pip install -U "ray[default] @ https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-3.0.0.dev0-cp37-cp37m-manylinux2014_x86_64.whl"
+    #- sudo apt -f install
+    - sudo yum update -y
+    - sudo yum install python3-pip -y
+    - pip3 install -U "ray[default]"
+
+# Custom commands that will be run on the head node after common setup.
+head_setup_commands: []
+
+# Custom commands that will be run on worker nodes after common setup.
+worker_setup_commands: []
+
+# Command to start ray on the head node. You don't need to change this.
+head_start_ray_commands:
+    - ray stop
+    - ulimit -s unlimited; ray start --head --port=6379 --object-manager-port=8076 --autoscaling-config=~/ray_bootstrap_config.yaml
+
+# Command to start ray on worker nodes. You don't need to change this.
+worker_start_ray_commands:
+    - ray stop
+    - ulimit -s unlimited; ray start --address=$RAY_HEAD_IP:6379 --object-manager-port=8076

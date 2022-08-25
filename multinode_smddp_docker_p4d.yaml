@@ -1,0 +1,169 @@
+# A cluster setup for ML / RLlib workloads. Note that this uses pytorch by default.
+# If you want to use tensorflow, change pytorch_p36 to tensorflow_p36 below.
+#
+# Important: Make sure to run "source activate pytorch_p36" in your sessions to
+# activate the right conda environment. Otherwise you won't be able to import ray.
+#
+cluster_name: train_multinode
+
+# The minimum number of workers nodes to launch in addition to the head
+# node. This number should be >= 0.
+min_workers: 1
+
+# The maximum number of workers nodes to launch in addition to the head
+# node. This takes precedence over min_workers.
+max_workers: 1
+
+# The autoscaler will scale up the cluster faster with higher upscaling speed.
+# E.g., if the task requires adding more nodes then autoscaler will gradually
+# scale up the cluster in chunks of upscaling_speed*currently_running_nodes.
+# This number should be > 0.
+upscaling_speed: 1.0
+
+# This executes all commands on all nodes in the docker container,
+# and opens all the necessary ports to support the Ray cluster.
+# Empty string means disabled.
+# docker:
+#     image: "rayproject/ray-ml:1.13.0-py38-gpu" # e.g., rayproject/ray-ml:latest
+#     container_name: "ray_docker_mnist" # e.g. ray_docker
+#     # If true, pulls latest version of image. Otherwise, `docker run` will only pull the image
+#     # if no cached version is present.
+#     pull_before_run: True
+#     run_options: []  # Extra options to pass into "docker run"
+
+docker:
+    #image: "763104351884.dkr.ecr.us-west-2.amazonaws.com/pytorch-training:1.12.0-gpu-py38-cu113-ubuntu20.04-sagemaker-v1.0" 
+    image: "763104351884.dkr.ecr.us-west-2.amazonaws.com/pytorch-training:1.12.0-gpu-py38"
+    container_name: "smddp_test"
+    # If true, pulls latest version of image. Otherwise, `docker run` will only pull the image
+    # if no cached version is present.
+    pull_before_run: True
+    run_options: []
+        # - RUN sudo yum install rsync grsync
+        # Extra options to pass into "docker run"
+
+# If a node is idle for this many minutes, it will be removed.
+idle_timeout_minutes: 150
+
+# Cloud-provider specific configuration.
+provider:
+    type: aws
+    region: us-west-2
+    # Availability zone(s), comma-separated, that nodes may be launched in.
+    # Nodes are currently spread between zones by a round-robin approach,
+    # however this implementation detail should not be relied upon.
+    availability_zone: us-west-2a
+    # Whether to allow node reuse. If set to False, nodes will be terminated
+    # instead of stopped.
+    cache_stopped_nodes: True # If not present, the default is True.
+
+# How Ray will authenticate with newly launched nodes.
+auth:
+    ssh_user: ec2-user
+# By default Ray creates a new private keypair, but you can also use your own.
+# If you do so, make sure to also set "KeyName" in the head and worker node
+# configurations below.
+    #ssh_private_key: /Users/fcamargx/Desktop/fcamargx-key-pair.pem  
+
+# Provider-specific config for the head node, e.g. instance type. By default
+# Ray will auto-configure unspecified fields such as SubnetId and KeyName.
+# For more documentation on available fields, see:
+# http://boto3.readthedocs.io/en/latest/reference/services/ec2.html#EC2.ServiceResource.create_instances
+head_node:
+    #InstanceType: m4.16xlarge
+    InstanceType: p4d.24xlarge
+    #InstanceType: p3.2xlarge
+    #InstanceType: p4d.24xlarge
+    #ImageId: ami-098c378a13f6a51bc
+    ImageId: ami-0cb8ef87892998b20
+   # KeyName: fcamargx-key-pair
+    # add elastic fabric adapter and fsx
+    # You can provision additional disk space with a conf as follows
+    BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+              VolumeSize: 100
+
+    # Additional options in the boto docs.
+
+# Provider-specific config for worker nodes, e.g. instance type. By default
+# Ray will auto-configure unspecified fields such as SubnetId and KeyName.
+# For more documentation on available fields, see:
+# http://boto3.readthedocs.io/en/latest/reference/services/ec2.html#EC2.ServiceResource.create_instances
+worker_nodes:
+    #InstanceType: m4.16xlarge
+    InstanceType: p4d.24xlarge
+    #InstanceType: p3.2xlarge
+    #ImageId: ami-098c378a13f6a51bc
+    ImageId: ami-0cb8ef87892998b20
+    #KeyName: fcamargx-key-pair
+
+    # Comment this in to use spot nodes.
+    # InstanceMarketOptions:
+    #     MarketType: spot
+    #     # Additional options can be found in the boto docs, e.g.
+    #     #   SpotOptions:
+    #     #       MaxPrice: MAX_HOURLY_PRICE
+    #
+    # Additional options in the boto docs.
+
+# Files or directories to copy to the head and worker nodes. The format is a
+# dictionary from REMOTE_PATH: LOCAL_PATH, e.g.
+file_mounts: {
+#    "/path1/on/remote/machine": "/path1/on/local/machine",
+#    "/path2/on/remote/machine": "/path2/on/local/machine",
+}
+
+# Files or directories to copy from the head node to the worker nodes. The format is a
+# list of paths. The same path on the head node will be copied to the worker node.
+# This behavior is a subset of the file_mounts behavior. In the vast majority of cases
+# you should just use file_mounts. Only use this if you know what you're doing!
+cluster_synced_files: []
+
+# Whether changes to directories in file_mounts or cluster_synced_files in the head node
+# should sync to the worker node continuously
+file_mounts_sync_continuously: False
+
+# List of commands that will be run before `setup_commands`. If docker is
+# enabled, these commands will run outside the container and before docker
+# is setup.
+initialization_commands:
+    - aws configure
+    - aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin 763104351884.dkr.ecr.us-west-2.amazonaws.com
+    #- docker ps
+    # - docker pull 763104351884.dkr.ecr.us-west-2.amazonaws.com/pytorch-training:1.12.0-gpu-py38-cu113-ubuntu20.04-sagemaker-v1.0
+    # - docker exec -it smddp_test bash
+    # - sudo yum install python3-pip
+    # - pip3 install -U "ray[default]"
+
+
+# List of shell commands to run to set up nodes.
+setup_commands:
+    #- aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin 763104351884.dkr.ecr.us-west-2.amazonaws.com
+    #- docker ps
+    - apt install -y python3-pip
+    - pip install -U "ray[default]"
+
+# # Custom commands that will be run on the head node after common setup.
+head_setup_commands: []
+    #- pip install 'boto3>=1.4.8'  # 1.4.8 adds InstanceMarketOptions
+    # - pip install 'pytorch-lightning==1.5.0'
+    # - aws configure
+    # - aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin 763104351884.dkr.ecr.us-west-2.amazonaws.com
+    # - pip install 'lightning-bolts==0.5.0' 
+
+# Custom commands that will be run on worker nodes after common setup.
+worker_setup_commands: []
+    # - pip install 'pytorch-lightning==1.5.0'
+    # - pip install 'lightning-bolts==0.5.0'
+
+
+# # Command to start ray on the head node. You don't need to change this.
+head_start_ray_commands:
+    - ray stop
+    - ulimit -n 65536; ray start --head --port=6379 --object-manager-port=8076 --autoscaling-config=~/ray_bootstrap_config.yaml
+
+# Command to start ray on worker nodes. You don't need to change this.
+worker_start_ray_commands:
+    - ray stop
+    - ulimit -n 65536; ray start --address=$RAY_HEAD_IP:6379 --object-manager-port=8076
